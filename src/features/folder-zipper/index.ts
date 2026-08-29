@@ -260,7 +260,7 @@ const folder = folderArgResult.data;
 const optionsResult = CliOptionsSchema.safeParse(program.opts<CliOptions>());
 if (!optionsResult.success) {
   logger.error(
-    optionsResult.error.issues[0]?.path.join("."),
+    `"${optionsResult.error.issues[0]?.path.join(".")}"`,
     optionsResult.error.issues[0]?.message,
   );
   process.exit(1);
