@@ -6,7 +6,9 @@
   "scripts": {
     "lint": "biome check --write",
     "lint:unsafe": "biome check --write --unsafe",
-    "format": "biome format --write"
+    "format": "biome format --write",
+    "duplicate-remover": "bun run ./src/features/duplicate-remover/index.ts",
+    "folder-zipper": "bun run ./src/features/folder-zipper/index.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.11",

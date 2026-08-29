@@ -4,13 +4,14 @@ import path from "node:path";
 import { Command } from "commander";
 import { runLimited } from "@/utils/concurrency.ts";
 import { walkFiles } from "@/utils/fs.ts";
+import { logger } from "@/utils/logger.ts";
 import { promptYesNo } from "@/utils/prompt.ts";
+import { DEFAULT_CACHE_DIR, DEFAULT_CONCURRENCY } from "./constants.ts";
 import {
-  DEFAULT_CACHE_DIR,
-  DEFAULT_CONCURRENCY,
-  DEFAULT_DIR,
-} from "./constants.ts";
-import { CacheEntrySchema, CliOptionsSchema } from "./schemas.ts";
+  CacheEntrySchema,
+  CliOptionsSchema,
+  FolderArgSchema,
+} from "./schemas.ts";
 import type { Cache, CliOptions } from "./types.ts";
 
 // ================= CONFIG =================
@@ -18,9 +19,9 @@ import type { Cache, CliOptions } from "./types.ts";
 const program = new Command();
 
 program
-  .name("dedupe")
+  .name("duplicate-remover")
   .description("Find and remove duplicate files")
-  .option("-d, --dir <path>", "target folder", DEFAULT_DIR)
+  .argument("<folder>", "target folder")
   .option("-n, --dry-run", "report duplicates without deleting")
   .option(
     "-c, --concurrency <number>",
@@ -33,12 +34,28 @@ program
   .option("-v, --verbose", "show verbose output")
   .parse(process.argv);
 
-const options: CliOptions = CliOptionsSchema.parse(program.opts());
+const folderArgResult = FolderArgSchema.safeParse(program.args[0]);
+if (!folderArgResult.success) {
+  logger.error(folderArgResult.error.issues[0]?.message);
+  program.help();
+  process.exit(1);
+}
+const folder = folderArgResult.data;
+
+const optionsResult = CliOptionsSchema.safeParse(program.opts());
+if (!optionsResult.success) {
+  logger.error(
+    optionsResult.error.issues[0]?.path.join("."),
+    optionsResult.error.issues[0]?.message,
+  );
+  process.exit(1);
+}
+const options: CliOptions = optionsResult.data;
 
 const cacheDir = path.resolve(options.cacheDir);
 fs.mkdirSync(cacheDir, { recursive: true });
 
-const folderPath = path.resolve(options.dir);
+const folderPath = path.resolve(folder);
 const normalizedPath = folderPath.toLowerCase();
 const folderHash = crypto
   .createHash("md5")
@@ -70,7 +87,7 @@ if (fs.existsSync(cacheFilePath)) {
       ),
     );
   } catch (err) {
-    console.warn("Unable to read cache file, starting fresh:", err);
+    logger.warn("Unable to read cache file, starting fresh:", err);
     cache = {};
   }
 }
@@ -101,7 +118,7 @@ async function getFileHashWithCache(filePath: string): Promise<string> {
 
   if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
     if (verbose) {
-      console.log("Using cached hash for", absolutePath);
+      logger.info("Using cached hash for", absolutePath);
     }
     return cached.hash;
   }
@@ -134,7 +151,7 @@ function cleanCache(validFiles: string[]) {
 async function findDuplicates() {
   const files = await walkFiles(folderPath);
 
-  console.log("Total files:", files.length);
+  logger.info("Total files:", files.length);
 
   const sizeMap = new Map<number, string[]>();
 
@@ -202,7 +219,7 @@ async function main() {
       throw new Error("Target path is not a folder");
     }
   } catch (_err) {
-    console.error(
+    logger.error(
       "Target directory does not exist or is not a folder:",
       folderPath,
     );
@@ -211,35 +228,35 @@ async function main() {
 
   const { duplicates, files } = await findDuplicates();
 
-  console.log("\n=== RESULT ===");
-  console.log("Duplicate groups:", duplicates.length);
+  logger.info("=== RESULT ===");
+  logger.info("Duplicate groups:", duplicates.length);
 
   for (const group of duplicates) {
-    console.log("\nDuplicate group:");
+    logger.info("Duplicate group:");
     group.forEach((file, index) => {
-      console.log(index === 0 ? " Keep:" : " Delete:", file);
+      logger.info(index === 0 ? " Keep:" : " Delete:", file);
     });
   }
 
   if (dryRun) {
-    console.log("\nDry run enabled: no files were deleted.");
+    logger.info("Dry run enabled: no files were deleted.");
   } else if (duplicates.length === 0) {
-    console.log("\nNo duplicate files found. Nothing to delete.");
+    logger.info("No duplicate files found. Nothing to delete.");
   } else {
     if (confirmDelete) {
       const confirmed = await promptYesNo(
         "\nConfirm deletion of duplicate files?",
       );
       if (!confirmed) {
-        console.log("Deletion cancelled by user.");
+        logger.info("Deletion cancelled by user.");
       } else {
         for (const group of duplicates) {
           for (const file of group.slice(1)) {
             try {
               await fs.promises.unlink(file);
-              console.log("Deleted:", file);
+              logger.info("Deleted:", file);
             } catch (err) {
-              console.error("Delete failed:", file, err);
+              logger.error("Delete failed:", file, err);
             }
           }
         }
@@ -249,9 +266,9 @@ async function main() {
         for (const file of group.slice(1)) {
           try {
             await fs.promises.unlink(file);
-            console.log("Deleted:", file);
+            logger.info("Deleted:", file);
           } catch (err) {
-            console.error("Delete failed:", file, err);
+            logger.error("Delete failed:", file, err);
           }
         }
       }
@@ -261,10 +278,10 @@ async function main() {
   cleanCache(files);
   saveCache();
 
-  console.log("\nDone!");
+  logger.info("Done!");
 }
 
 main().catch((err) => {
-  console.error("Unexpected error:", err);
+  logger.error("Unexpected error:", err);
   process.exit(1);
 });

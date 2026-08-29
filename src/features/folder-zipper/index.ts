@@ -3,6 +3,7 @@ import path from "node:path";
 import { ZipArchive } from "archiver";
 import { Command } from "commander";
 import { walkFiles } from "@/utils/fs.ts";
+import { logger } from "@/utils/logger.ts";
 import { escapeRegExp } from "@/utils/string.ts";
 import {
   BYTES_IN_MB,
@@ -205,7 +206,7 @@ async function createZipArchive(
 
     output.on("close", () => {
       const finalSize = fs.statSync(outputFile).size;
-      console.log(`Created ${outputFile} (${formatSize(finalSize)}).`);
+      logger.info(`Created ${outputFile} (${formatSize(finalSize)}).`);
       resolve();
     });
 
@@ -262,8 +263,8 @@ export async function zipDirectory(
     );
   }
 
-  console.log(
-    `Found ${eligibleFiles.length} eligible file(s) and ${skippedFiles.length} skipped file(s) >= ${formatSize(MAX_FILE_SIZE_BYTES)}.\n`,
+  logger.info(
+    `Found ${eligibleFiles.length} eligible file(s) and ${skippedFiles.length} skipped file(s) >= ${formatSize(MAX_FILE_SIZE_BYTES)}.`,
   );
 
   const zipNameBase = path.basename(outputFile, ".zip");
@@ -285,7 +286,7 @@ export async function zipDirectory(
     );
     const bundleSize = bundle.reduce((sum, file) => sum + file.size, 0);
 
-    console.log(
+    logger.info(
       `Creating bundle ${bundleIndex + 1}/${runBundleCount} with ${bundle.length} file(s), total original size: ${formatSize(bundleSize)}.`,
     );
 
@@ -293,19 +294,19 @@ export async function zipDirectory(
 
     if (options.deleteOriginal) {
       await deleteSelectedFiles(bundle);
-      console.log("Deleted original files after compression.\n");
+      logger.info("Deleted original files after compression.");
     } else {
       const tempDirName = `${zipNameBase}${partSuffix}`;
       const tempRoot = path.join(outputDir, tempDirName);
       await moveSelectedFilesToTemp(bundle, tempRoot);
-      console.log(`Moved original files into temp folder ${tempRoot}.\n`);
+      logger.info(`Moved original files into temp folder ${tempRoot}.`);
     }
 
     partIndex += 1;
   }
 
   if (skippedFiles.length > 0) {
-    console.log(
+    logger.info(
       `Skipped ${skippedFiles.length} large file(s) >= ${formatSize(MAX_FILE_SIZE_BYTES)} (200 MB).`,
     );
   }
@@ -314,11 +315,11 @@ export async function zipDirectory(
   const remainingFilesCount = eligibleFiles.length - usedFilesCount;
   if (remainingFilesCount > 0) {
     if (options.maxParts && stoppedByMaxParts) {
-      console.warn(
-        `Warning: maxParts=${options.maxParts} was reached and ${remainingFilesCount} eligible file(s) remain uncompressed.`,
+      logger.warn(
+        `maxParts=${options.maxParts} was reached and ${remainingFilesCount} eligible file(s) remain uncompressed.`,
       );
     } else {
-      console.log(
+      logger.info(
         `Left ${remainingFilesCount} eligible file(s) uncompressed because remaining total did not meet the minimum ${formatSize(TARGET_MIN_BYTES)}.`,
       );
     }
@@ -329,6 +330,7 @@ const program = new Command();
 
 program
   .name("folder-zipper")
+  .description("Compress files in a folder into one or more zip files")
   .argument("<folder>", "Folder to compress")
   .option("-p, --prefix <prefix>", "File name prefix", "")
   .option("-s, --suffix <suffix>", "File name suffix", `_${getCurrentDate()}`)
@@ -346,7 +348,7 @@ program
 
 const folderArgResult = FolderArgSchema.safeParse(program.args[0]);
 if (!folderArgResult.success) {
-  console.error(`❌ ${folderArgResult.error.issues[0]?.message}`);
+  logger.error(folderArgResult.error.issues[0]?.message);
   program.help();
   process.exit(1);
 }
@@ -354,7 +356,10 @@ const folder = folderArgResult.data;
 
 const optionsResult = CliOptionsSchema.safeParse(program.opts<CliOptions>());
 if (!optionsResult.success) {
-  console.error(`❌ ${optionsResult.error.issues[0]?.message}`);
+  logger.error(
+    optionsResult.error.issues[0]?.path.join("."),
+    optionsResult.error.issues[0]?.message,
+  );
   process.exit(1);
 }
 const options = optionsResult.data;
@@ -362,7 +367,7 @@ const options = optionsResult.data;
 const sourceDir = path.resolve(folder);
 
 if (!fs.existsSync(sourceDir)) {
-  console.error(`❌ Folder not found: ${sourceDir}`);
+  logger.error(`Folder not found: ${sourceDir}`);
   process.exit(1);
 }
 
