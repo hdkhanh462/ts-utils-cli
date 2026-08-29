@@ -3,7 +3,11 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "format": "@biomejs/biome format --write"
+  },
   "devDependencies": {
+    "@biomejs/biome": "2.5.11",
     "@types/archiver": "^8.0.0",
     "@types/bun": "latest"
   },
