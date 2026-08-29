@@ -227,7 +227,10 @@ async function createZipArchive(
   });
 }
 
-export async function zipDirectory(
+// ================= RUN =================
+//#region RUN
+
+async function main(
   sourceDir: string,
   outputFile: string,
   options: { deleteOriginal?: boolean; maxParts?: number } = {},
@@ -252,7 +255,7 @@ export async function zipDirectory(
     );
   }
 
-  const { bundles, stoppedByMaxParts, remainingFiles } = buildBundles(
+  const { bundles, stoppedByMaxParts } = buildBundles(
     eligibleFiles,
     options.maxParts,
   );
@@ -384,7 +387,12 @@ if (!fs.existsSync(outputDir)) {
 
 const outputFile = path.join(outputDir, zipFileName);
 
-await zipDirectory(sourceDir, outputFile, {
+main(sourceDir, outputFile, {
   deleteOriginal: options.delete,
   maxParts: options.maxParts,
+}).catch((error: Error) => {
+  logger.error("Error during compression:", error.message);
+  process.exit(1);
 });
+
+//#endregion

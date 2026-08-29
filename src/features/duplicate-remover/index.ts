@@ -211,6 +211,7 @@ async function findDuplicates() {
 }
 
 // ================= RUN =================
+//#region RUN
 
 async function main() {
   try {
@@ -281,7 +282,9 @@ async function main() {
   logger.info("Done!");
 }
 
-main().catch((err) => {
-  logger.error("Unexpected error:", err);
+main().catch((error: Error) => {
+  logger.error("Error during duplicate removal:", error.message);
   process.exit(1);
 });
+
+//#endregion
