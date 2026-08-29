@@ -227,6 +227,66 @@ async function createZipArchive(
   });
 }
 
+// ================= CONFIG =================
+
+const program = new Command();
+
+program
+  .name("folder-zipper")
+  .description("Compress files in a folder into one or more zip files")
+  .argument("<folder>", "Folder to compress")
+  .option("-p, --prefix <prefix>", "File name prefix", "")
+  .option("-s, --suffix <suffix>", "File name suffix", `_${getCurrentDate()}`)
+  .option("-o, --output <dir>", "Output directory for zip file")
+  .option(
+    "-d, --delete",
+    "Delete original files after compression instead of moving them to temp",
+  )
+  .option(
+    "-m, --max-parts <number>",
+    "Maximum number of zip files to create",
+    (value) => parseInt(value, 10),
+  )
+  .parse();
+
+const folderArgResult = FolderArgSchema.safeParse(program.args[0]);
+if (!folderArgResult.success) {
+  logger.error(folderArgResult.error.issues[0]?.message);
+  program.help();
+  process.exit(1);
+}
+const folder = folderArgResult.data;
+
+const optionsResult = CliOptionsSchema.safeParse(program.opts<CliOptions>());
+if (!optionsResult.success) {
+  logger.error(
+    optionsResult.error.issues[0]?.path.join("."),
+    optionsResult.error.issues[0]?.message,
+  );
+  process.exit(1);
+}
+const options = optionsResult.data;
+
+const sourceDir = path.resolve(folder);
+
+if (!fs.existsSync(sourceDir)) {
+  logger.error(`Folder not found: ${sourceDir}`);
+  process.exit(1);
+}
+
+const folderName = path.basename(sourceDir);
+const zipFileName = `${options.prefix}${folderName}${options.suffix}.zip`;
+
+const outputDir = options.output
+  ? path.resolve(options.output)
+  : path.dirname(sourceDir);
+
+if (!fs.existsSync(outputDir)) {
+  fs.mkdirSync(outputDir, { recursive: true });
+}
+
+const outputFile = path.join(outputDir, zipFileName);
+
 // ================= RUN =================
 //#region RUN
 
@@ -328,64 +388,6 @@ async function main(
     }
   }
 }
-
-const program = new Command();
-
-program
-  .name("folder-zipper")
-  .description("Compress files in a folder into one or more zip files")
-  .argument("<folder>", "Folder to compress")
-  .option("-p, --prefix <prefix>", "File name prefix", "")
-  .option("-s, --suffix <suffix>", "File name suffix", `_${getCurrentDate()}`)
-  .option("-o, --output <dir>", "Output directory for zip file")
-  .option(
-    "-d, --delete",
-    "Delete original files after compression instead of moving them to temp",
-  )
-  .option(
-    "-m, --max-parts <number>",
-    "Maximum number of zip files to create",
-    (value) => parseInt(value, 10),
-  )
-  .parse();
-
-const folderArgResult = FolderArgSchema.safeParse(program.args[0]);
-if (!folderArgResult.success) {
-  logger.error(folderArgResult.error.issues[0]?.message);
-  program.help();
-  process.exit(1);
-}
-const folder = folderArgResult.data;
-
-const optionsResult = CliOptionsSchema.safeParse(program.opts<CliOptions>());
-if (!optionsResult.success) {
-  logger.error(
-    optionsResult.error.issues[0]?.path.join("."),
-    optionsResult.error.issues[0]?.message,
-  );
-  process.exit(1);
-}
-const options = optionsResult.data;
-
-const sourceDir = path.resolve(folder);
-
-if (!fs.existsSync(sourceDir)) {
-  logger.error(`Folder not found: ${sourceDir}`);
-  process.exit(1);
-}
-
-const folderName = path.basename(sourceDir);
-const zipFileName = `${options.prefix}${folderName}${options.suffix}.zip`;
-
-const outputDir = options.output
-  ? path.resolve(options.output)
-  : path.dirname(sourceDir);
-
-if (!fs.existsSync(outputDir)) {
-  fs.mkdirSync(outputDir, { recursive: true });
-}
-
-const outputFile = path.join(outputDir, zipFileName);
 
 main(sourceDir, outputFile, {
   deleteOriginal: options.delete,
