@@ -27,6 +27,9 @@
     "noPropertyAccessFromIndexSignature": false,
 
     // Others
-    "types": ["bun"]
+    "types": ["bun"],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   }
 }

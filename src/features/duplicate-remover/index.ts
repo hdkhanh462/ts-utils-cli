@@ -1,8 +1,17 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
+import { runLimited } from "@/utils/concurrency.ts";
+import { walkFiles } from "@/utils/fs.ts";
+import { promptYesNo } from "@/utils/prompt.ts";
+import {
+  DEFAULT_CACHE_DIR,
+  DEFAULT_CONCURRENCY,
+  DEFAULT_DIR,
+} from "./constants.ts";
+import { CacheEntrySchema, CliOptionsSchema } from "./schemas.ts";
+import type { Cache, CliOptions } from "./types.ts";
 
 // ================= CONFIG =================
 
@@ -11,31 +20,20 @@ const program = new Command();
 program
   .name("dedupe")
   .description("Find and remove duplicate files")
-  .option("-d, --dir <path>", "target folder", "./test-folder")
+  .option("-d, --dir <path>", "target folder", DEFAULT_DIR)
   .option("-n, --dry-run", "report duplicates without deleting")
   .option(
     "-c, --concurrency <number>",
     "number of parallel jobs",
     (v) => parseInt(v, 10),
-    os.cpus().length,
+    DEFAULT_CONCURRENCY,
   )
-  .option(
-    "--cache-dir <path>",
-    "cache directory",
-    path.join(os.homedir(), ".dedupe-cache"),
-  )
+  .option("--cache-dir <path>", "cache directory", DEFAULT_CACHE_DIR)
   .option("--no-confirm", "do not prompt before deleting duplicates")
   .option("-v, --verbose", "show verbose output")
   .parse(process.argv);
 
-const options = program.opts<{
-  dir: string;
-  dryRun?: boolean;
-  concurrency: number;
-  cacheDir: string;
-  confirm?: boolean;
-  verbose?: boolean;
-}>();
+const options: CliOptions = CliOptionsSchema.parse(program.opts());
 
 const cacheDir = path.resolve(options.cacheDir);
 fs.mkdirSync(cacheDir, { recursive: true });
@@ -48,22 +46,14 @@ const folderHash = crypto
   .digest("hex");
 
 const cacheFilePath = path.join(cacheDir, `${folderHash}.json`);
-const concurrency = Number.isFinite(options.concurrency)
-  ? Math.max(1, options.concurrency)
-  : os.cpus().length;
+const concurrency = options.concurrency;
 const dryRun = Boolean(options.dryRun);
 const confirmDelete = options.confirm !== false;
 const verbose = Boolean(options.verbose);
 
 // ================= CACHE =================
 
-type CacheEntry = {
-  size: number;
-  mtimeMs: number;
-  hash: string;
-};
-
-let cache: Record<string, CacheEntry> = {};
+let cache: Cache = {};
 
 if (fs.existsSync(cacheFilePath)) {
   try {
@@ -71,19 +61,10 @@ if (fs.existsSync(cacheFilePath)) {
     cache = Object.fromEntries(
       Object.entries(rawCache as Record<string, unknown>).map(
         ([key, entry]) => {
-          if (
-            entry &&
-            typeof entry === "object" &&
-            typeof (entry as any).size === "number" &&
-            typeof (entry as any).mtimeMs === "number" &&
-            typeof (entry as any).hash === "string"
-          ) {
-            return [path.resolve(key), entry as CacheEntry];
-          }
-
+          const parsed = CacheEntrySchema.safeParse(entry);
           return [
             path.resolve(key),
-            { size: 0, mtimeMs: 0, hash: "" } as CacheEntry,
+            parsed.success ? parsed.data : { size: 0, mtimeMs: 0, hash: "" },
           ];
         },
       ),
@@ -98,43 +79,6 @@ function saveCache() {
   const tempPath = `${cacheFilePath}.tmp`;
   fs.writeFileSync(tempPath, JSON.stringify(cache, null, 2));
   fs.renameSync(tempPath, cacheFilePath);
-}
-
-// ================= SCAN =================
-
-async function getAllFiles(dir: string): Promise<string[]> {
-  const results: string[] = [];
-
-  let entries: fs.Dirent[];
-  try {
-    entries = await fs.promises.readdir(dir, { withFileTypes: true });
-  } catch {
-    return results;
-  }
-
-  await Promise.all(
-    entries.map(async (entry) => {
-      const fullPath = path.join(dir, entry.name);
-
-      try {
-        if (entry.isDirectory()) {
-          const nested = await getAllFiles(fullPath);
-          results.push(...nested);
-        } else if (entry.isFile()) {
-          results.push(fullPath);
-        } else if (entry.isSymbolicLink()) {
-          const stat = await fs.promises.stat(fullPath).catch(() => null);
-          if (stat?.isFile()) {
-            results.push(fullPath);
-          }
-        }
-      } catch {
-        // skip unreadable items
-      }
-    }),
-  );
-
-  return results;
 }
 
 // ================= HASH =================
@@ -173,45 +117,6 @@ async function getFileHashWithCache(filePath: string): Promise<string> {
   return hash;
 }
 
-// ================= CONCURRENCY =================
-
-async function runLimited<T>(
-  tasks: (() => Promise<T>)[],
-  limit: number,
-): Promise<(T | undefined)[]> {
-  if (tasks.length === 0) {
-    return [];
-  }
-
-  const results: (T | undefined)[] = new Array(tasks.length);
-  let index = 0;
-
-  async function worker() {
-    while (true) {
-      const current = index++;
-      if (current >= tasks.length) {
-        break;
-      }
-
-      const task = tasks[current];
-      if (!task) {
-        continue;
-      }
-
-      try {
-        results[current] = await task();
-      } catch (err) {
-        console.error(`Task ${current} failed:`, err);
-        results[current] = undefined;
-      }
-    }
-  }
-
-  const workers = Array.from({ length: Math.min(limit, tasks.length) }, worker);
-  await Promise.all(workers);
-  return results;
-}
-
 // ================= CLEAN CACHE =================
 
 function cleanCache(validFiles: string[]) {
@@ -224,25 +129,10 @@ function cleanCache(validFiles: string[]) {
   }
 }
 
-async function promptYesNo(question: string): Promise<boolean> {
-  const fr = await import("node:readline");
-  const rl = fr.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return new Promise((resolve) => {
-    rl.question(`${question} (y/N) `, (answer) => {
-      rl.close();
-      resolve(answer.trim().toLowerCase() === "y");
-    });
-  });
-}
-
 // ================= MAIN LOGIC =================
 
 async function findDuplicates() {
-  const files = await getAllFiles(folderPath);
+  const files = await walkFiles(folderPath);
 
   console.log("Total files:", files.length);
 

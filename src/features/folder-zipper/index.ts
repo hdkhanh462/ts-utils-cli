@@ -2,17 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { ZipArchive } from "archiver";
 import { Command } from "commander";
-
-const BYTES_IN_MB = 1024 ** 2;
-const MAX_FILE_SIZE_BYTES = 200 * BYTES_IN_MB;
-const TARGET_MIN_BYTES = 500 * BYTES_IN_MB;
-const TARGET_MAX_BYTES = 550 * BYTES_IN_MB;
-
-type FileEntry = {
-  fullPath: string;
-  relativePath: string;
-  size: number;
-};
+import { walkFiles } from "@/utils/fs.ts";
+import { escapeRegExp } from "@/utils/string.ts";
+import {
+  BYTES_IN_MB,
+  MAX_FILE_SIZE_BYTES,
+  TARGET_MAX_BYTES,
+  TARGET_MIN_BYTES,
+} from "./constants.ts";
+import { CliOptionsSchema, FolderArgSchema } from "./schemas.ts";
+import type { CliOptions, FileEntry } from "./types.ts";
 
 function getCurrentDate(): string {
   return new Date().toISOString().split("T")[0]!;
@@ -25,34 +24,19 @@ function formatSize(bytes: number): string {
   return `${bytes.toLocaleString()} bytes`;
 }
 
-async function collectFiles(
-  sourceDir: string,
-  baseDir = sourceDir,
-): Promise<FileEntry[]> {
-  const entries = await fs.promises.readdir(sourceDir, { withFileTypes: true });
-  const files: FileEntry[] = [];
+async function collectFiles(sourceDir: string): Promise<FileEntry[]> {
+  const fullPaths = await walkFiles(sourceDir);
 
-  for (const entry of entries) {
-    const fullPath = path.join(sourceDir, entry.name);
-
-    if (entry.isDirectory()) {
-      files.push(...(await collectFiles(fullPath, baseDir)));
-      continue;
-    }
-
-    if (!entry.isFile()) {
-      continue;
-    }
-
-    const stats = await fs.promises.stat(fullPath);
-    files.push({
-      fullPath,
-      relativePath: path.relative(baseDir, fullPath).replace(/\\/g, "/"),
-      size: stats.size,
-    });
-  }
-
-  return files;
+  return Promise.all(
+    fullPaths.map(async (fullPath) => {
+      const stats = await fs.promises.stat(fullPath);
+      return {
+        fullPath,
+        relativePath: path.relative(sourceDir, fullPath).replace(/\\/g, "/"),
+        size: stats.size,
+      };
+    }),
+  );
 }
 
 function chooseFiles(files: FileEntry[]): FileEntry[] {
@@ -122,10 +106,6 @@ async function deleteSelectedFiles(selectedFiles: FileEntry[]): Promise<void> {
   await Promise.all(
     selectedFiles.map((file) => fs.promises.unlink(file.fullPath)),
   );
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function buildBundles(
@@ -364,30 +344,20 @@ program
   )
   .parse();
 
-type CLIOptions = {
-  prefix?: string;
-  suffix?: string;
-  output?: string;
-  delete?: boolean;
-  maxParts?: number;
-};
-
-const folder = program.args[0];
-const options = program.opts<CLIOptions>();
-
-if (
-  options.maxParts != null &&
-  (Number.isNaN(options.maxParts) || options.maxParts <= 0)
-) {
-  console.error("❌ --max-parts must be a positive integer.");
-  process.exit(1);
-}
-
-if (!folder) {
-  console.error("❌ Please specify a folder to compress.");
+const folderArgResult = FolderArgSchema.safeParse(program.args[0]);
+if (!folderArgResult.success) {
+  console.error(`❌ ${folderArgResult.error.issues[0]?.message}`);
   program.help();
   process.exit(1);
 }
+const folder = folderArgResult.data;
+
+const optionsResult = CliOptionsSchema.safeParse(program.opts<CliOptions>());
+if (!optionsResult.success) {
+  console.error(`❌ ${optionsResult.error.issues[0]?.message}`);
+  process.exit(1);
+}
+const options = optionsResult.data;
 
 const sourceDir = path.resolve(folder);
 
