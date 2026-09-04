@@ -8,6 +8,7 @@ import { logger } from "@/utils/logger.ts";
 import { escapeRegExp } from "@/utils/string.ts";
 import {
   BYTES_IN_MB,
+  DEFAULT_OVERSIZED_DIR_NAME,
   MAX_FILE_SIZE_BYTES,
   TARGET_MAX_BYTES,
   TARGET_MIN_BYTES,
@@ -249,8 +250,9 @@ program
     (value) => parseInt(value, 10),
   )
   .option(
-    "--oversized-dir <dir>",
-    `Move files >= ${MAX_FILE_SIZE_BYTES / BYTES_IN_MB} MB into this directory (default: leave them in place)`,
+    "--oversized-dir [dir]",
+    `Move files >= ${MAX_FILE_SIZE_BYTES / BYTES_IN_MB} MB into this directory ` +
+      `(default: "${DEFAULT_OVERSIZED_DIR_NAME}" under the output directory; omit the flag to leave them in place)`,
   )
   .parse();
 
@@ -293,7 +295,11 @@ if (!fs.existsSync(outputDir)) {
 const outputFile = path.join(outputDir, zipFileName);
 
 const oversizedDir = options.oversizedDir
-  ? path.resolve(options.oversizedDir)
+  ? path.resolve(
+      options.oversizedDir === true
+        ? path.join(outputDir, DEFAULT_OVERSIZED_DIR_NAME)
+        : options.oversizedDir,
+    )
   : undefined;
 
 // ================= RUN =================

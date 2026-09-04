@@ -102,7 +102,7 @@ bun run folder-zipper <folder> [options]
 | `-o, --output <dir>` | Output directory for the zip file(s) | parent of the target folder |
 | `-d, --delete` | Delete original files after compression instead of moving them to a temp folder | `false` |
 | `-m, --max-parts <number>` | Maximum number of zip files to create | unlimited |
-| `--oversized-dir <dir>` | Move files ≥ 200 MB into this directory instead of leaving them in place | leaves them in place |
+| `--oversized-dir [dir]` | Move files ≥ 200 MB into `[dir]`; if passed with no value, uses `oversized` under the output directory | omit the flag entirely to leave them in place |
 
 ### 📚 Docs
 
