@@ -38,7 +38,7 @@ Hardware:
 
 - Clone this repository and install dependencies:
 	```bash
-	git clone git@github.com:hdkhanh462/ts-utils-cli.git
+	git clone https://github.com/hdkhanh462/ts-utils-cli.git
 	cd ts-utils-cli
 	bun install
 	```
