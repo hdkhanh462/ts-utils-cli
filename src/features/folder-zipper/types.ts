@@ -10,4 +10,5 @@ export type CliOptions = {
   output?: string;
   delete?: boolean;
   maxParts?: number;
+  oversizedDir?: string;
 };

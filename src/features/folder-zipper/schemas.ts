@@ -14,4 +14,5 @@ export const CliOptionsSchema = z.object({
     .int("--max-parts must be a positive integer.")
     .positive("--max-parts must be a positive integer.")
     .optional(),
+  oversizedDir: z.string().min(1).optional(),
 });

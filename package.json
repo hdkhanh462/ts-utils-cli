@@ -3,6 +3,10 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "bin": {
+    "duplicate-remover": "./src/features/duplicate-remover/index.ts",
+    "folder-zipper": "./src/features/folder-zipper/index.ts"
+  },
   "scripts": {
     "lint": "biome check --write",
     "lint:unsafe": "biome check --write --unsafe",

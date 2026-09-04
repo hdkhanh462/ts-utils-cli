@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import fs from "node:fs";
 import path from "node:path";
 import { ZipArchive } from "archiver";
@@ -247,6 +248,10 @@ program
     "Maximum number of zip files to create",
     (value) => parseInt(value, 10),
   )
+  .option(
+    "--oversized-dir <dir>",
+    `Move files >= ${MAX_FILE_SIZE_BYTES / BYTES_IN_MB} MB into this directory (default: leave them in place)`,
+  )
   .parse();
 
 const folderArgResult = FolderArgSchema.safeParse(program.args[0]);
@@ -287,13 +292,21 @@ if (!fs.existsSync(outputDir)) {
 
 const outputFile = path.join(outputDir, zipFileName);
 
+const oversizedDir = options.oversizedDir
+  ? path.resolve(options.oversizedDir)
+  : undefined;
+
 // ================= RUN =================
 //#region RUN
 
 async function main(
   sourceDir: string,
   outputFile: string,
-  options: { deleteOriginal?: boolean; maxParts?: number } = {},
+  options: {
+    deleteOriginal?: boolean;
+    maxParts?: number;
+    oversizedDir?: string;
+  } = {},
 ): Promise<void> {
   const allFiles = await collectFiles(sourceDir);
 
@@ -372,6 +385,13 @@ async function main(
     logger.info(
       `Skipped ${skippedFiles.length} large file(s) >= ${formatSize(MAX_FILE_SIZE_BYTES)} (200 MB).`,
     );
+
+    if (options.oversizedDir) {
+      await moveSelectedFilesToTemp(skippedFiles, options.oversizedDir);
+      logger.info(
+        `Moved ${skippedFiles.length} oversized file(s) into ${options.oversizedDir}.`,
+      );
+    }
   }
 
   const usedFilesCount = bundles.flat().length;
@@ -392,6 +412,7 @@ async function main(
 main(sourceDir, outputFile, {
   deleteOriginal: options.delete,
   maxParts: options.maxParts,
+  oversizedDir,
 }).catch((error: Error) => {
   logger.error("Error during compression:", error.message);
   process.exit(1);
