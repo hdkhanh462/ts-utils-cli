@@ -5,7 +5,7 @@ import { ZipArchive } from "archiver";
 import { Command } from "commander";
 import { walkFiles } from "@/utils/fs.ts";
 import { logger } from "@/utils/logger.ts";
-import { escapeRegExp } from "@/utils/string.ts";
+import { breakLine, escapeRegExp } from "@/utils/string.ts";
 import {
   BYTES_IN_MB,
   DEFAULT_OVERSIZED_DIR_NAME,
@@ -368,6 +368,8 @@ async function main(
     );
     const bundleSize = bundle.reduce((sum, file) => sum + file.size, 0);
 
+    breakLine();
+
     logger.info(
       `Creating bundle ${bundleIndex + 1}/${runBundleCount} with ${bundle.length} file(s), total original size: ${formatSize(bundleSize)}.`,
     );
@@ -387,6 +389,8 @@ async function main(
     partIndex += 1;
   }
 
+  breakLine();
+
   if (skippedFiles.length > 0) {
     logger.info(
       `Skipped ${skippedFiles.length} large file(s) >= ${formatSize(MAX_FILE_SIZE_BYTES)} (200 MB).`,
@@ -403,6 +407,7 @@ async function main(
   const usedFilesCount = bundles.flat().length;
   const remainingFilesCount = eligibleFiles.length - usedFilesCount;
   if (remainingFilesCount > 0) {
+    breakLine();
     if (options.maxParts && stoppedByMaxParts) {
       logger.warn(
         `maxParts=${options.maxParts} was reached and ${remainingFilesCount} eligible file(s) remain uncompressed.`,
