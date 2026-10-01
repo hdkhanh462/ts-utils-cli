@@ -407,7 +407,7 @@ async function main(
   const usedFilesCount = bundles.flat().length;
   const remainingFilesCount = eligibleFiles.length - usedFilesCount;
   if (remainingFilesCount > 0) {
-    breakLine();
+    if (skippedFiles.length > 0) breakLine();
     if (options.maxParts && stoppedByMaxParts) {
       logger.warn(
         `maxParts=${options.maxParts} was reached and ${remainingFilesCount} eligible file(s) remain uncompressed.`,

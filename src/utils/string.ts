@@ -3,5 +3,5 @@ export function escapeRegExp(value: string): string {
 }
 
 export function breakLine() {
-  console.log("\n");
+  console.log();
 }
