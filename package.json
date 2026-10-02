@@ -5,14 +5,16 @@
   "private": true,
   "bin": {
     "duplicate-remover": "./src/features/duplicate-remover/index.ts",
-    "folder-zipper": "./src/features/folder-zipper/index.ts"
+    "folder-zipper": "./src/features/folder-zipper/index.ts",
+    "git-switcher": "./src/features/git-switcher/index.ts"
   },
   "scripts": {
     "lint": "biome check --write",
     "lint:unsafe": "biome check --write --unsafe",
     "format": "biome format --write",
     "duplicate-remover": "bun run ./src/features/duplicate-remover/index.ts",
-    "folder-zipper": "bun run ./src/features/folder-zipper/index.ts"
+    "folder-zipper": "bun run ./src/features/folder-zipper/index.ts",
+    "git-switcher": "bun run ./src/features/git-switcher/index.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.11",
